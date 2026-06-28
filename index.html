@@ -482,8 +482,10 @@
       top: 0;
       left: -10000px;
       width: 210mm;
-      background: #fff;
+      background: var(--paper);
       pointer-events: none;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
     .pdf-export-sheet {
@@ -495,6 +497,8 @@
       border: 0 !important;
       box-shadow: none !important;
       background: var(--paper) !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
       overflow: visible !important;
       break-after: auto !important;
       page-break-after: auto !important;
@@ -1304,6 +1308,39 @@ PLZ Ort</div>
         exportSheet.querySelectorAll('.screen-only, .col-remove').forEach((element) => element.remove());
         exportHost.appendChild(exportSheet);
         document.body.appendChild(exportHost);
+
+        /*
+         * html2pdf teilt das gerenderte Element in A4-Seiten. Ist das Element
+         * auf der letzten Seite kürzer als A4, wäre der restliche PDF-Bereich
+         * standardmäßig weiß. Die Exportfläche wird deshalb bis knapp unter
+         * die volle Höhe aller tatsächlich benötigten Seiten verlängert.
+         * Der kleine Sicherheitsabzug verhindert eine zusätzliche Leerseite
+         * durch Rundungsabweichungen zwischen CSS-Pixeln, Canvas und PDF.
+         */
+        const pageProbe = document.createElement('div');
+        pageProbe.style.cssText = [
+          'position:absolute',
+          'visibility:hidden',
+          'pointer-events:none',
+          'width:1px',
+          'height:297mm'
+        ].join(';');
+        exportHost.appendChild(pageProbe);
+
+        const pageHeightPx = pageProbe.getBoundingClientRect().height;
+        pageProbe.remove();
+
+        const contentHeightPx = exportSheet.getBoundingClientRect().height;
+        const roundingTolerancePx = 2;
+        const pageSafetyPx = 1;
+        const pageCount = Math.max(
+          1,
+          Math.ceil((contentHeightPx - roundingTolerancePx) / pageHeightPx)
+        );
+        const filledHeightPx = (pageCount * pageHeightPx) - pageSafetyPx;
+
+        exportSheet.style.minHeight = `${filledHeightPx}px`;
+        exportHost.style.minHeight = `${filledHeightPx}px`;
 
         return { exportHost, exportSheet };
       }
