@@ -592,10 +592,6 @@
             <input id="invoice-date" type="date">
           </div>
         </div>
-        <div class="field-row">
-          <label for="service-date">Leistungsdatum</label>
-          <input id="service-date" type="date">
-        </div>
       </section>
 
       <section class="group" aria-label="Kunden-Befüllhilfe">
@@ -682,10 +678,6 @@
                 <tr>
                   <th>Datum</th>
                   <td id="invoice-date-preview"></td>
-                </tr>
-                <tr>
-                  <th>Leistungsdatum</th>
-                  <td id="service-date-preview"></td>
                 </tr>
               </tbody>
             </table>
@@ -791,7 +783,7 @@ PLZ Ort</div>
         </section>
 
         <footer class="sheet-footer">
-          Leistungsdatum entspricht dem Rechnungsdatum, sofern oben nicht abweichend gesetzt.
+          Leistungsdatum entspricht dem Rechnungsdatum.
         </footer>
       </article>
     </section>
@@ -892,7 +884,6 @@ PLZ Ort</div>
       const fields = {
         invoiceNumber: document.getElementById('invoice-number'),
         invoiceDate: document.getElementById('invoice-date'),
-        serviceDate: document.getElementById('service-date'),
         customerName: document.getElementById('customer-name'),
         customerStreet: document.getElementById('customer-street'),
         customerCity: document.getElementById('customer-city'),
@@ -905,7 +896,6 @@ PLZ Ort</div>
       const preview = {
         invoiceNumber: document.getElementById('invoice-number-preview'),
         invoiceDate: document.getElementById('invoice-date-preview'),
-        serviceDate: document.getElementById('service-date-preview'),
         customer: document.getElementById('customer-preview'),
         orderType: document.getElementById('order-type-preview'),
         paymentType: document.getElementById('payment-type-preview'),
@@ -965,7 +955,6 @@ PLZ Ort</div>
       function updatePreview() {
         preview.invoiceNumber.textContent = fields.invoiceNumber.value || START_NUMBER;
         preview.invoiceDate.textContent = formatDate(fields.invoiceDate.value);
-        preview.serviceDate.textContent = formatDate(fields.serviceDate.value);
         preview.orderType.textContent = fields.orderType.value;
         preview.paymentType.textContent = fields.paymentType.value;
         preview.paymentStatus.textContent = fields.paymentStatus.value;
@@ -1058,7 +1047,6 @@ PLZ Ort</div>
         const nextNumber = Math.max(START_NUMBER, Number(fields.invoiceNumber.value || START_NUMBER) + 1);
         fields.invoiceNumber.value = nextNumber;
         fields.invoiceDate.value = todayISO();
-        fields.serviceDate.value = todayISO();
         fields.customerName.value = '';
         fields.customerStreet.value = '';
         fields.customerCity.value = '';
@@ -1170,8 +1158,6 @@ PLZ Ort</div>
         text(512, 770, 10, fields.invoiceNumber.value || START_NUMBER);
         text(372, 752, 10, 'Datum');
         text(512, 752, 10, formatDate(fields.invoiceDate.value));
-        text(372, 734, 10, 'Leistungsdatum');
-        text(512, 734, 10, formatDate(fields.serviceDate.value));
         line(42, 694, 553, 694);
 
         text(42, 674, 9, 'RECHNUNG AN', true);
@@ -1234,7 +1220,7 @@ PLZ Ort</div>
         text(42, bankY - 50, 10, 'BIC: DEUTDEDBUE');
         text(42, bankY - 66, 10, 'Bank: Deutsche Bank');
 
-        text(42, 54, 8, 'Leistungsdatum entspricht dem Rechnungsdatum, sofern oben nicht abweichend gesetzt.');
+        text(42, 54, 8, 'Leistungsdatum entspricht dem Rechnungsdatum.');
 
         const objects = [
           '<< /Type /Catalog /Pages 2 0 R >>',
@@ -1277,7 +1263,6 @@ PLZ Ort</div>
 
       renderSuggestions();
       fields.invoiceDate.value = todayISO();
-      fields.serviceDate.value = todayISO();
       Object.values(fields).forEach((field) => field.addEventListener('input', updatePreview));
       fields.orderType.addEventListener('change', updatePreview);
       fields.paymentType.addEventListener('change', updatePreview);
