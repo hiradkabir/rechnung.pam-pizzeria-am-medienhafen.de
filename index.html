@@ -288,6 +288,14 @@
       font-weight: 650;
     }
 
+    .payment-due-note {
+      margin: 8px 0 0;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
+
     .items-block {
       margin-top: 18px;
     }
@@ -712,6 +720,8 @@ PLZ Ort</div>
           </div>
         </section>
 
+        <p class="payment-due-note" id="payment-due-note" hidden></p>
+
         <section class="items-block" aria-label="Positionen">
           <div class="items-scroll">
             <table class="items-table">
@@ -794,6 +804,7 @@ PLZ Ort</div>
       const VAT_RATE = 0.07;
       const START_NUMBER = 100;
       const SENDER_EMAIL = 'rezatalebi44@yahoo.de';
+      const DUE_NOTICE = 'Bei ausstehender Zahlung ist der Rechnungsbetrag innerhalb von 7 Tagen ab Rechnungsdatum fällig.';
       const MENU_ITEMS = [
         { nr: '1', category: 'Pizza', name: 'Margherita', price: 8 },
         { nr: '2', category: 'Pizza', name: 'Salami', price: 10 },
@@ -898,7 +909,8 @@ PLZ Ort</div>
         customer: document.getElementById('customer-preview'),
         orderType: document.getElementById('order-type-preview'),
         paymentType: document.getElementById('payment-type-preview'),
-        paymentStatus: document.getElementById('payment-status-preview')
+        paymentStatus: document.getElementById('payment-status-preview'),
+        paymentDueNote: document.getElementById('payment-due-note')
       };
 
       const items = document.getElementById('invoice-items');
@@ -957,6 +969,8 @@ PLZ Ort</div>
         preview.orderType.textContent = fields.orderType.value;
         preview.paymentType.textContent = fields.paymentType.value;
         preview.paymentStatus.textContent = fields.paymentStatus.value;
+        preview.paymentDueNote.textContent = DUE_NOTICE;
+        preview.paymentDueNote.hidden = fields.paymentStatus.value !== 'Ausstehend';
 
         const customerLines = [
           fields.customerName.value.trim() || 'Name / Firma',
@@ -1174,6 +1188,9 @@ PLZ Ort</div>
         text(178, 568, 10, fields.paymentType.value, true);
         text(314, 568, 10, fields.paymentStatus.value, true);
         text(450, 568, 10, '7%', true);
+        if (fields.paymentStatus.value === 'Ausstehend') {
+          text(42, 552, 8, DUE_NOTICE, true);
+        }
         line(42, 548, 553, 548);
 
         fillRect(42, 516, 511, 26, '0.949 0.933 0.902');
