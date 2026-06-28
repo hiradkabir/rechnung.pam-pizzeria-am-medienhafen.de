@@ -474,6 +474,90 @@
       margin-top: 10px;
     }
 
+
+
+    /* Separate A4 layout used only while generating the downloadable PDF. */
+    .pdf-export-host {
+      position: absolute;
+      top: 0;
+      left: -10000px;
+      width: 210mm;
+      background: #fff;
+      pointer-events: none;
+    }
+
+    .pdf-export-sheet {
+      width: 210mm !important;
+      min-height: 0 !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 16mm 15mm 14mm !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      background: var(--paper) !important;
+      overflow: visible !important;
+      break-after: auto !important;
+      page-break-after: auto !important;
+    }
+
+    .pdf-export-sheet .sheet-header {
+      grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr) !important;
+    }
+
+    .pdf-export-sheet .invoice-title,
+    .pdf-export-sheet .meta-table td {
+      text-align: right !important;
+    }
+
+    .pdf-export-sheet .meta-table th {
+      text-align: left !important;
+    }
+
+    .pdf-export-sheet .section-grid {
+      grid-template-columns: 1fr !important;
+    }
+
+    .pdf-export-sheet .order-strip {
+      grid-template-columns: repeat(4, 1fr) !important;
+    }
+
+    .pdf-export-sheet .below-table {
+      grid-template-columns: minmax(0, 1fr) minmax(230px, 280px) !important;
+    }
+
+    .pdf-export-sheet .items-scroll {
+      overflow: visible !important;
+    }
+
+    .pdf-export-sheet .items-table {
+      min-width: 0 !important;
+    }
+
+    .pdf-export-sheet .pdf-input-value {
+      display: block;
+      min-height: 20px;
+      padding: 3px 2px;
+      color: var(--text);
+      line-height: 1.35;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .pdf-export-sheet .num .pdf-input-value,
+    .pdf-export-sheet .pdf-input-value.num {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .pdf-export-sheet tr,
+    .pdf-export-sheet .sheet-header,
+    .pdf-export-sheet .order-strip,
+    .pdf-export-sheet .below-table,
+    .pdf-export-sheet .payment-block {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
     @media (max-width: 900px) {
       .app {
         grid-template-columns: 1fr;
@@ -807,6 +891,8 @@ PLZ Ort</div>
   </main>
 
   <datalist id="dish-suggestions"></datalist>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.14.0/dist/html2pdf.bundle.min.js"></script>
 
   <script>
     (() => {
@@ -1171,26 +1257,6 @@ PLZ Ort</div>
         window.location.href = mailto.toString();
       }
 
-      function asciiText(value) {
-        return String(value ?? '')
-          .replace(/Ä/g, 'Ae')
-          .replace(/Ö/g, 'Oe')
-          .replace(/Ü/g, 'Ue')
-          .replace(/ä/g, 'ae')
-          .replace(/ö/g, 'oe')
-          .replace(/ü/g, 'ue')
-          .replace(/ß/g, 'ss')
-          .replace(/€/g, 'EUR')
-          .replace(/[^\x20-\x7E]/g, '')
-          .replace(/\\/g, '\\\\')
-          .replace(/\(/g, '\\(')
-          .replace(/\)/g, '\\)');
-      }
-
-      function currencyPdf(value) {
-        return `${plainFormatter.format(value || 0)} EUR`;
-      }
-
       function collectInvoiceRows() {
         return [...items.children].map((row, index) => {
           const name = row.querySelector('.item-name').value.trim();
@@ -1201,144 +1267,112 @@ PLZ Ort</div>
         }).filter((row) => row.name || row.unitGross || row.lineGross);
       }
 
-      function buildInvoicePdf() {
+
+      function createPdfExportSheet() {
+        const sourceSheet = document.getElementById('invoice-sheet');
+        const exportHost = document.createElement('div');
+        const exportSheet = sourceSheet.cloneNode(true);
+
+        exportHost.className = 'pdf-export-host';
+        exportHost.setAttribute('aria-hidden', 'true');
+        exportSheet.removeAttribute('id');
+        exportSheet.classList.add('pdf-export-sheet');
+
+        const sourceInputs = [...sourceSheet.querySelectorAll('input')];
+        const exportInputs = [...exportSheet.querySelectorAll('input')];
+
+        exportInputs.forEach((input, index) => {
+          const sourceInput = sourceInputs[index];
+          const value = sourceInput ? sourceInput.value.trim() : input.value.trim();
+          const replacement = document.createElement('span');
+
+          replacement.className = 'pdf-input-value';
+          if (input.classList.contains('num')) {
+            replacement.classList.add('num');
+          }
+
+          if (input.classList.contains('item-price')) {
+            const parsed = parseCurrency(value);
+            replacement.textContent = parsed ? formatPlain(parsed) : '';
+          } else {
+            replacement.textContent = value;
+          }
+
+          input.replaceWith(replacement);
+        });
+
+        exportSheet.querySelectorAll('.screen-only, .col-remove').forEach((element) => element.remove());
+        exportHost.appendChild(exportSheet);
+        document.body.appendChild(exportHost);
+
+        return { exportHost, exportSheet };
+      }
+
+      async function downloadPdf() {
         const rows = collectInvoiceRows();
         if (!rows.length) {
           alert('Bitte zuerst mindestens eine Rechnungsposition eintragen.');
-          return null;
+          return;
         }
 
-        const gross = rows.reduce((sum, row) => sum + row.lineGross, 0);
-        const net = gross / (1 + VAT_RATE);
-        const vat = gross - net;
-        let content = '';
-
-        const text = (x, y, size, value, bold = false) => {
-          content += `BT /${bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${asciiText(value)}) Tj ET\n`;
-        };
-        const line = (x1, y1, x2, y2) => {
-          content += `${x1} ${y1} m ${x2} ${y2} l S\n`;
-        };
-        const fillRect = (x, y, width, height, rgb) => {
-          content += `q ${rgb} rg ${x} ${y} ${width} ${height} re f Q\n`;
-        };
-
-        fillRect(0, 0, 595, 842, '1 0.992 0.973');
-
-        text(42, 800, 15, 'Pizzeria am Medienhafen', true);
-        text(42, 780, 10, 'Inhaber: Reza Talebi');
-        text(42, 766, 10, 'Wupperstrasse 14, Medienhafen');
-        text(42, 752, 10, '40221 Duesseldorf');
-        text(42, 738, 10, 'Telefon: +49 211 30 33 852');
-        text(42, 724, 10, 'E-Mail: rezatalebi44@yahoo.de');
-        text(42, 710, 10, 'Steuernummer / USt-IdNr.: 106/5240/2297');
-
-        text(455, 800, 24, 'Rechnung', true);
-        text(372, 770, 10, 'Rechnungsnr.');
-        text(512, 770, 10, fields.invoiceNumber.value || START_NUMBER);
-        text(372, 752, 10, 'Datum');
-        text(512, 752, 10, formatDate(fields.invoiceDate.value));
-        line(42, 694, 553, 694);
-
-        text(42, 674, 9, 'RECHNUNG AN', true);
-        text(42, 652, 10, fields.customerName.value.trim() || 'Name / Firma');
-        text(42, 638, 10, fields.customerStreet.value.trim() || 'Strasse und Hausnummer');
-        text(42, 624, 10, fields.customerCity.value.trim() || 'PLZ Ort');
-        line(42, 604, 553, 604);
-
-        text(42, 584, 9, 'BESTELLART', true);
-        text(178, 584, 9, 'ZAHLUNGSART', true);
-        text(314, 584, 9, 'STATUS', true);
-        text(450, 584, 9, 'MWST', true);
-        text(42, 568, 10, fields.orderType.value, true);
-        text(178, 568, 10, fields.paymentType.value, true);
-        text(314, 568, 10, fields.paymentStatus.value, true);
-        text(450, 568, 10, '7%', true);
-        if (fields.paymentStatus.value === 'Ausstehend') {
-          text(42, 552, 8, DUE_NOTICE, true);
-        }
-        line(42, 548, 553, 548);
-
-        fillRect(42, 516, 511, 26, '0.949 0.933 0.902');
-        text(42, 528, 9, 'POS.', true);
-        text(82, 528, 9, 'GERICHT / LEISTUNG', true);
-        text(350, 528, 9, 'MENGE', true);
-        text(414, 528, 9, 'EINZEL BRUTTO', true);
-        text(500, 528, 9, 'GESAMT', true);
-        line(42, 516, 553, 516);
-
-        let y = 498;
-        rows.slice(0, 18).forEach((row) => {
-          const name = row.name.length > 48 ? `${row.name.slice(0, 45)}...` : row.name;
-          text(48, y, 10, String(row.index).padStart(2, '0'));
-          text(82, y, 10, name);
-          text(365, y, 10, String(row.qty));
-          text(426, y, 10, currencyPdf(row.unitGross));
-          text(506, y, 10, currencyPdf(row.lineGross));
-          line(42, y - 8, 553, y - 8);
-          y -= 22;
-        });
-
-        if (rows.length > 18) {
-          text(42, y, 9, `Weitere ${rows.length - 18} Position(en) nicht im PDF aufgefuehrt.`, true);
-          y -= 20;
+        if (typeof window.html2pdf !== 'function') {
+          alert('Die PDF-Bibliothek konnte nicht geladen werden. Bitte die Internetverbindung prüfen und die Seite neu laden.');
+          return;
         }
 
-        const summaryY = Math.max(170, y - 20);
-        text(330, summaryY, 10, 'Nettobetrag');
-        text(480, summaryY, 10, currencyPdf(net));
-        text(330, summaryY - 18, 10, 'MwSt 7%');
-        text(480, summaryY - 18, 10, currencyPdf(vat));
-        line(330, summaryY - 28, 553, summaryY - 28);
-        text(330, summaryY - 44, 12, 'Gesamtbetrag', true);
-        text(470, summaryY - 44, 12, currencyPdf(gross), true);
+        updatePreview();
+        updateTotals();
 
-        const bankY = summaryY - 88;
-        text(42, bankY, 9, 'BANKVERBINDUNG', true);
-        text(42, bankY - 18, 10, 'Inhaber: Reza Talebi');
-        text(42, bankY - 34, 10, 'IBAN: DE40 3007 0024 0490 4389 00');
-        text(42, bankY - 50, 10, 'BIC: DEUTDEDBUE');
-        text(42, bankY - 66, 10, 'Bank: Deutsche Bank');
-
-        text(42, 54, 8, 'Leistungsdatum entspricht dem Rechnungsdatum.');
-
-        const objects = [
-          '<< /Type /Catalog /Pages 2 0 R >>',
-          '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-          '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>',
-          '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-          '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
-          `<< /Length ${content.length} >>\nstream\n${content}endstream`
-        ];
-
-        let pdf = '%PDF-1.4\n';
-        const offsets = [0];
-        objects.forEach((object, index) => {
-          offsets.push(pdf.length);
-          pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-        });
-        const xrefOffset = pdf.length;
-        pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-        offsets.slice(1).forEach((offset) => {
-          pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
-        });
-        pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-        return pdf;
-      }
-
-      function downloadPdf() {
-        const pdf = buildInvoicePdf();
-        if (!pdf) return;
-        const blob = new Blob([pdf], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        const button = document.getElementById('download-pdf');
+        const originalLabel = button.textContent;
         const invoiceNo = fields.invoiceNumber.value || START_NUMBER;
-        link.href = url;
-        link.download = `rechnung-${invoiceNo}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        const { exportHost, exportSheet } = createPdfExportSheet();
+
+        button.disabled = true;
+        button.textContent = 'PDF wird erstellt…';
+
+        const options = {
+          margin: 0,
+          filename: `rechnung-${invoiceNo}.pdf`,
+          image: {
+            type: 'png'
+          },
+          html2canvas: {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: '#fffdf8',
+            logging: false,
+            letterRendering: true,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: 1200
+          },
+          jsPDF: {
+            unit: 'mm',
+            format: 'a4',
+            orientation: 'portrait',
+            compress: true,
+            precision: 16
+          },
+          pagebreak: {
+            mode: ['css'],
+            avoid: ['tr', '.sheet-header', '.order-strip', '.below-table', '.payment-block', '.sheet-footer']
+          }
+        };
+
+        try {
+          await window.html2pdf()
+            .set(options)
+            .from(exportSheet)
+            .save();
+        } catch (error) {
+          console.error('PDF-Erstellung fehlgeschlagen:', error);
+          alert('Die PDF konnte nicht erstellt werden. Bitte die Seite neu laden und erneut versuchen.');
+        } finally {
+          exportHost.remove();
+          button.disabled = false;
+          button.textContent = originalLabel;
+        }
       }
 
       renderSuggestions();
