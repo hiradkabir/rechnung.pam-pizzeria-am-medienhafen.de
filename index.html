@@ -353,6 +353,23 @@
       display: none !important;
     }
 
+    .item-select {
+      display: none;
+      margin-bottom: 6px;
+      background: #fff;
+    }
+
+    html.ios-device .item-select {
+      display: block;
+      min-height: 44px;
+      font-size: 16px;
+    }
+
+    html.ios-device .item-name {
+      min-height: 44px;
+      font-size: 16px;
+    }
+
     .num {
       text-align: right;
     }
@@ -907,6 +924,12 @@ PLZ Ort</div>
       const suggestions = document.getElementById('dish-suggestions');
       const currencyFormatter = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
       const plainFormatter = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+      if (isIOS) {
+        document.documentElement.classList.add('ios-device');
+      }
 
       function todayISO() {
         const now = new Date();
@@ -938,6 +961,36 @@ PLZ Ort</div>
 
       function suggestionValue(item) {
         return `${item.nr} - ${item.name}`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function renderDishSelectOptions() {
+        const categories = new Map();
+
+        MENU_ITEMS.forEach((item) => {
+          if (!categories.has(item.category)) {
+            categories.set(item.category, []);
+          }
+          categories.get(item.category).push(item);
+        });
+
+        const groups = [...categories.entries()].map(([category, categoryItems]) => {
+          const options = categoryItems.map((item) => (
+            `<option value="${escapeHtml(item.nr)}">${escapeHtml(item.nr)} - ${escapeHtml(item.name)} (${escapeHtml(formatCurrency(item.price))})</option>`
+          )).join('');
+
+          return `<optgroup label="${escapeHtml(category)}">${options}</optgroup>`;
+        }).join('');
+
+        return `<option value="">Gericht auswählen</option>${groups}`;
       }
 
       function renderSuggestions() {
@@ -973,22 +1026,49 @@ PLZ Ort</div>
         const row = document.createElement('tr');
         row.innerHTML = `
           <td class="col-pos"></td>
-          <td><input class="item-name" type="text" list="dish-suggestions" placeholder="Gericht suchen oder frei eintragen" value="${data.name || ''}" aria-label="Gericht oder Leistung"></td>
+          <td>
+            <select class="item-select screen-only" aria-label="Gericht aus Auswahlliste auswählen">
+              ${renderDishSelectOptions()}
+            </select>
+            <input class="item-name" type="text" list="dish-suggestions" placeholder="Gericht suchen oder frei eintragen" value="${escapeHtml(data.name || '')}" aria-label="Gericht oder Leistung">
+          </td>
           <td class="col-qty"><input class="item-qty num" type="number" min="0" step="1" value="${data.qty || 1}" inputmode="numeric" aria-label="Menge"></td>
           <td class="col-price"><input class="item-price num" type="text" value="${data.price ? formatPlain(data.price) : ''}" inputmode="decimal" aria-label="Einzelpreis brutto"></td>
           <td class="col-total num item-total">0,00 €</td>
           <td class="col-remove screen-only"><button class="remove-row" type="button" aria-label="Position entfernen">×</button></td>
         `;
 
+        const select = row.querySelector('.item-select');
         const name = row.querySelector('.item-name');
         const qty = row.querySelector('.item-qty');
         const price = row.querySelector('.item-price');
+
+        if (isIOS) {
+          name.removeAttribute('list');
+        }
+
+        const initialItem = findMenuItem(name.value);
+        if (initialItem) {
+          select.value = initialItem.nr;
+        }
+
+        select.addEventListener('change', () => {
+          const selected = MENU_ITEMS.find((item) => item.nr === select.value);
+          if (selected) {
+            name.value = selected.name;
+            price.value = formatPlain(selected.price);
+            updateTotals();
+          }
+        });
 
         name.addEventListener('change', () => {
           const selected = findMenuItem(name.value);
           if (selected) {
             name.value = selected.name;
             price.value = formatPlain(selected.price);
+            select.value = selected.nr;
+          } else {
+            select.value = '';
           }
           updateTotals();
         });
